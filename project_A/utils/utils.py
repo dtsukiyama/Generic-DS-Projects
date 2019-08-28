@@ -49,6 +49,19 @@ class Processing(object):
         return demand, supply, data
 
     @classmethod
+    def clean_expected_payload(cls, payload):
+        data = pd.DataFrame({'demand_supply_ratio':payload['demand_supply_ratio'],
+                             'day':datetime.strptime(payload['date'], '%Y-%m-%d').day,
+                             'week':datetime.strptime(payload['date'], '%Y-%m-%d').isocalendar()[1],
+                             'month':datetime.strptime(payload['date'], '%Y-%m-%d').month,
+                             'tmv':payload['tmv'],
+                             'price':payload['price'],
+                             'category_grouped':payload['category_grouped']}, index = [0])
+        demand =  payload['demand_supply_ratio']
+        supply = payload['supply']
+        return demand, supply, data
+
+    @classmethod
     def additional_features(cls, data):
         # daily aggreate demand
         mean_demand = data.groupby('date').mean()['demand_supply_ratio']\

@@ -1,13 +1,10 @@
 import numpy as np
 
-from flask import Flask, request, flash, session
+from flask import Flask, request
 from utils.models import Scoring, Pricing
 from utils.utils import Processing
 
 application = Flask(__name__)
-
-model = Scoring.load_model()
-pipe = Scoring.load_pipe()
 
 @application.route('/predict', methods=['POST'])
 def predict():
@@ -25,9 +22,7 @@ def predict():
     if request.method == 'POST':
         payload = request.get_json()
         demand, supply, features = Processing.clean_payload(payload)
-        features = pipe.transform(features)
-        score = model.predict_proba(features)[:,1]
-        pricing_model = Pricing(score[0])
+        pricing_model = Pricing(1)
         return {'price': pricing_model.predict(demand, supply)}
 
 if __name__=='__main__':

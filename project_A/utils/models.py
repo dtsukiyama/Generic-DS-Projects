@@ -119,7 +119,7 @@ class Model(object):
     def classifier_features(cls, data):
         dummy_categories = pd.get_dummies(data['category_grouped'], prefix='category')
         data = pd.concat([data.drop(['category_grouped','price','date','tmv'], axis = 1), dummy_categories], axis = 1)
-        train_features = [b for b in data.columns if b not in ['is_booked','vehicle_id','host_revenue','day_bookings','price']]
+        train_features = [b for b in data.columns if b not in ['is_booked','vehicle_id','host_revenue','day_bookings']]
         return data, train_features
 
     @classmethod
@@ -355,16 +355,8 @@ class Train(object):
         cls.save_model(model, cls.tree_path)
 
     @classmethod
-    def train_booking_classifier(cls, data):
+    def train_expected_value(cls, data):
         data = Processing.clean(data)
-        """
-        train, train_features = Model.classifier_features(data)
-        X_train, X_test, y_train, y_test = train_test_split(train[train_features],
-                                                            train.is_booked,
-                                                            test_size=0.10,
-                                                            random_state=1234)
-        """
-
         pipe = cls.booked_features()
         pipe.fit(data)
         cls.save_model(pipe, cls.tree_pipe_path)
