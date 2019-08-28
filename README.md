@@ -11,7 +11,8 @@
 5. README.md
 6. requirements.txt
 7. vehicles_booking_history.csv
-8. images/
+8. Dockerfile
+9. CircleCI config
 
 # Setup
 
