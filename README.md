@@ -36,6 +36,14 @@ source env/bin/activate
 pip install -r requirements.txt
 ```
 
+# Case Study
+
+Open up the Jupyter notebook:
+
+```
+jupyter notebook
+```
+
 # API
 
 From the main directory (where api.py is) run:
