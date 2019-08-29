@@ -1,3 +1,14 @@
+
+# Generic DS Projects
+
+This repo contains a sample data science project. The goal is not simply to model a problem but to also tackle some common things that come up in a real job. These include:
+
+1. APIs
+2. Testing
+3. Continuous integration and Continuous deployment
+
+[![CircleCI](https://circleci.com/gh/dtsukiyama/Generic-DS-Projects.svg?style=svg)](https://circleci.com/gh/dtsukiyama/Generic-DS-Projects)
+
 # Contents
 
 1. case-study.ipynb
