@@ -1,29 +1,32 @@
 
 # Generic DS Projects
 
+[![CircleCI](https://circleci.com/gh/dtsukiyama/Generic-DS-Projects.svg?style=svg)](https://circleci.com/gh/dtsukiyama/Generic-DS-Projects)
+
 This repo contains a sample data science project. The goal is not simply to model a problem but to also tackle some common things that come up in a real job. These include:
 
 1. APIs
 2. Testing
 3. Continuous integration and Continuous deployment
+4. Design Docs
 
-[![CircleCI](https://circleci.com/gh/dtsukiyama/Generic-DS-Projects.svg?style=svg)](https://circleci.com/gh/dtsukiyama/Generic-DS-Projects)
 
 # Contents
 
-1. case-study.ipynb
-2. utils
+1. case-study-optimzation.ipynb
+2. case-study-fraud.ipynb
+3. utils
   - models.py
   - pipeline.py
   - utils.py
   - models/
-3. api.py
-4. local_test.sh
-5. README.md
-6. requirements.txt
-7. vehicles_booking_history.csv
-8. Dockerfile
-9. CircleCI config
+4. api.py
+5. local_test.sh
+6. README.md
+7. requirements.txt
+8. vehicles_booking_history.csv
+9. Dockerfile
+10. CircleCI config
 
 # Setup
 
@@ -36,7 +39,7 @@ source env/bin/activate
 pip install -r requirements.txt
 ```
 
-# Case Study
+# Case Studies
 
 Open up the Jupyter notebook:
 
