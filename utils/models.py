@@ -1,24 +1,209 @@
 import pandas as pd
 import numpy as np
-import statsmodels.api as sm
-import pickle
+import xgboost as xgb
 
-from utils.utils import Processing
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.linear_model import LinearRegression
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+from collections import Counter
+from imblearn.over_sampling import RandomOverSampler
 from sklearn.metrics import classification_report
 from sklearn.metrics import roc_auc_score
-from sklearn.metrics import accuracy_score
-from sklearn.cluster import KMeans
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.pipeline import FeatureUnion
 from sklearn.pipeline import Pipeline
-from scipy.stats import poisson
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import FeatureUnion
+from sklearn.preprocessing import OneHotEncoder
+from utils.pipeline import FeatureSelector, LogTransformer
 import scipy.optimize as optimize
+
+class Metrics:
+
+    def probabilityOp(prediction_data):
+        """
+        Find number of cases correctly classified at different thresholds
+        """
+        count = None
+        probs = []
+        for decile in [np.round(x * 0.1, 1) for x in range(1, 10)]:
+            count = Counter(prediction_data.query('prob > @decile')['test'])
+            if len(count) == 2:
+                probs.append(count[1]*1.0/(count[0]+count[1]))
+            else:
+                probs.append(1)
+
+        del count
+        return list(zip([np.round(x * 0.1, 1) for x in range(1, 10)], probs))
+
+class Processing(object):
+    """
+    Contains:
+        - classmethods for constructing different feature types (One Hot Encode, Log, Scale)
+    """
+
+
+    dollar_features = ['Amount']
+    time_features = ['Time']
+
+    @classmethod
+    def original_constructor(cls, feature):
+        return Pipeline([('selector', FeatureSelector(column=feature))
+                         ])
+
+    @classmethod
+    def categorical_constructor(cls, feature):
+        return Pipeline([('selector', FeatureSelector(column=feature)),
+                         ('standard', OneHotEncoder()),
+                        ])
+
+    @classmethod
+    def scale_constructor(cls, feature):
+        return Pipeline([('selector', FeatureSelector(column=feature)),
+                         ('standard', StandardScaler())
+                         ])
+
+    @classmethod
+    def log_constructor(cls, feature):
+        return Pipeline([('selector', LogTransformer(column=feature))
+                         ])
+
+    @classmethod
+    def clean(cls, data):
+        """
+        Args: data
+        Returns: cleaned data
+        """
+
+        for col in cls.dollar_features:
+            data.loc[data[col] == 0, col] = 0.01
+
+        return data
+
+    @classmethod
+    def features(cls, data):
+        """
+        Args: data
+        Returns: Scikit-Learn pipeline of baseline feature transformations
+        """
+        base_features = data.columns
+        base_features = [b for b in base_features if b not in ['Time','Amount','Class']]
+
+        # build categorical feature dicionary
+        feature_pipe = dict()
+
+        # build continuous log features
+        for col in cls.dollar_features:
+            feature_pipe[col] = cls.log_constructor(col)
+
+        # build continuous scale features
+        for col in cls.time_features:
+            feature_pipe[col] = cls.scale_constructor(col)
+
+        # row stats
+        for col in base_features:
+            feature_pipe[col] = cls.original_constructor(col)
+
+        feature_list = []
+        for key in feature_pipe.keys():
+            feature_list.append((key, feature_pipe[key]))
+
+        features = FeatureUnion(feature_list)
+        pipe = Pipeline([('features', features)])
+        return pipe
+
+
+class Models(object):
+
+    """
+    contains:
+        - baseline model method
+            used to build an intial model to measure performance against
+    """
+
+    baseline_parameters = {'min_child_weight': 50,
+                           'eta': 0.1,
+                           'colsample_bytree': 0.3,
+                           'max_depth': 8,
+                           'subsample': 0.8,
+                           'lambda': 1.,
+                           'nthread': -1,
+                           'booster' : 'gbtree',
+                           'silent': 1,
+                           'eval_metric': 'auc',
+                           'objective': 'binary:logistic'}
+    baseline_rounds = 1000
+
+    @classmethod
+    def baseline(cls, X, y):
+        X_train, X_holdout, y_train, y_holdout = train_test_split(X,
+                                                                  y,
+                                                                  test_size=0.1,
+                                                                  random_state=4321)
+
+        X_train, X_valid, y_train, y_valid = train_test_split(X_train,
+                                                              y_train,
+                                                              test_size=0.2,
+                                                              random_state=1234)
+        dtrain = xgb.DMatrix(X_train, label=y_train)
+        dvalid = xgb.DMatrix(X_valid, label=y_valid)
+        watchlist = [(dtrain, 'train'), (dvalid, 'valid')]
+        model = xgb.train(cls.baseline_parameters,
+                          dtrain,
+                          cls.baseline_rounds,
+                          watchlist,
+                          early_stopping_rounds=10,
+                          maximize=False,
+                          verbose_eval=1)
+
+        # holdout
+        dholdout = xgb.DMatrix(X_holdout)
+        preds = model.predict(dholdout)
+        classes = np.array(preds) > 0.5
+        classes = classes.astype(int)
+        print('ROC score: {}'.format(roc_auc_score(y_holdout, preds)))
+        print('Classification report: {}'.format(print(classification_report(y_holdout, classes))))
+        prediction_data = pd.DataFrame({'prob':preds,
+                                        'test':y_holdout})
+        print(Metrics.probabilityOp(prediction_data))
+
+        return model
+
+    @classmethod
+    def resample_baseline(cls, X, y):
+        X_train, X_holdout, y_train, y_holdout = train_test_split(X,
+                                                                  y,
+                                                                  test_size=0.1,
+                                                                  random_state=4321)
+
+        X_train, X_valid, y_train, y_valid = train_test_split(X_train,
+                                                              y_train,
+                                                              test_size=0.2,
+                                                              random_state=1234)
+
+        ros = RandomOverSampler(random_state=42)
+        X_train, y_train = ros.fit_resample(X_train, y_train)
+        dtrain = xgb.DMatrix(X_train, label=y_train)
+        dvalid = xgb.DMatrix(X_valid, label=y_valid)
+        watchlist = [(dtrain, 'train'), (dvalid, 'valid')]
+        model = xgb.train(cls.baseline_parameters,
+                          dtrain,
+                          cls.baseline_rounds,
+                          watchlist,
+                          early_stopping_rounds=10,
+                          maximize=False,
+                          verbose_eval=1)
+
+        # holdout
+        dholdout = xgb.DMatrix(X_holdout)
+        preds = model.predict(dholdout)
+        classes = np.array(preds) > 0.5
+        classes = classes.astype(int)
+        print('ROC score: {}'.format(roc_auc_score(y_holdout, preds)))
+        print('Classification report: {}'.format(print(classification_report(y_holdout, classes))))
+        prediction_data = pd.DataFrame({'prob':preds,
+                                        'test':y_holdout})
+        print(Metrics.probabilityOp(prediction_data))
+
+        return model
 
 
 class Pricing(object):
@@ -60,25 +245,3 @@ class Pricing(object):
                                     bounds = bounds,
                                     constraints = constraints)
         return np.round(results['x'][0])
-
-class Scoring(object):
-
-    tree_path = 'utils/models/classifier.pkl'
-    pipe_path = 'utils/models/tree_pipe.pkl'
-
-    @classmethod
-    def load_model(cls):
-        with open(cls.tree_path, 'rb') as file:
-            model = pickle.load(file)
-        return model
-
-    @classmethod
-    def load_pipe(cls):
-        with open(cls.pipe_path, 'rb') as file:
-            model = pickle.load(file)
-        return model
-
-    @classmethod
-    def poisson_predictions(cls, x):
-        prediction_poisson = poisson.rvs(mu=x, size=5, random_state=5)
-        return np.mean(prediction_poisson)

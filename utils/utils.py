@@ -1,10 +1,6 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.pipeline import Pipeline
-from utils.pipeline import FeatureSelector, FeatureOneHot, dummySelector, LogTransformer
 
 class Processing(object):
 
