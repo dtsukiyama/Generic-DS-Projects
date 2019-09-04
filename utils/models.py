@@ -14,6 +14,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import FeatureUnion
 from sklearn.preprocessing import OneHotEncoder
 from utils.pipeline import FeatureSelector, LogTransformer
+from utils.utils import IO
 import scipy.optimize as optimize
 
 class Metrics:
@@ -43,6 +44,16 @@ class Processing(object):
 
     dollar_features = ['Amount']
     time_features = ['Time']
+
+
+    remove_cols = ['accountNumber','customerId','cardCVV','enteredCVV','cardLast4Digits',
+                   'transactionDateTime','currentExpDate','accountOpenDate','dateOfLastAddressChange',
+                   'merchantName']
+
+    dollar_features_b = ['creditLimit','transactionAmount','currentBalance']
+    continuous_features = ['availableMoney']
+    base_features = ['credit_share']
+    null_value_features = ['acqCountry','merchantCountryCode','transactionType']
 
     @classmethod
     def original_constructor(cls, feature):
@@ -100,6 +111,87 @@ class Processing(object):
 
         # row stats
         for col in base_features:
+            feature_pipe[col] = cls.original_constructor(col)
+
+        feature_list = []
+        for key in feature_pipe.keys():
+            feature_list.append((key, feature_pipe[key]))
+
+        features = FeatureUnion(feature_list)
+        pipe = Pipeline([('features', features)])
+        return pipe
+
+    @classmethod
+    def clean_b(cls, data):
+        """
+        Args: data
+        Returns: cleaned data
+        """
+
+        null_lookup = IO.find_null(data)
+        data.drop(null_lookup, axis=1, inplace=True)
+
+        # convert to datetime, create time features
+        data['transactionDateTime'] = pd.to_datetime(data['transactionDateTime'])
+        data['hour'] = data['transactionDateTime'].dt.hour
+        data['day'] = data['transactionDateTime'].dt.dayofweek
+
+        # boolean for if cardCVV and enteredCVV match
+        data['cvv_match'] = data['cardCVV'] == data['enteredCVV']
+        data.drop(cls.remove_cols, axis = 1, inplace=True)
+
+        # percent available money vs credit limit
+        data['credit_share'] = 	data['availableMoney']/data['creditLimit']
+
+        # boolean for acqCountry/merchantCountryCode match
+        data['country_match'] = data['acqCountry'] == data['merchantCountryCode']
+
+        # columns that perhaps should not be numeric
+        convert_cols = ['posEntryMode','posConditionCode','hour','day']
+        for col in convert_cols:
+            data[col] = data[col].fillna(0)
+
+        for col in convert_cols:
+            data[col] = data[col].astype(str)
+
+        # categorical columns with null values
+        for col in cls.null_value_features:
+            data[col] = data[col].fillna('None')
+
+        for col in cls.dollar_features_b:
+            data.loc[data[col] == 0, col] = 0.01
+
+        return data
+
+    @classmethod
+    def features_b(cls, data):
+        """
+        Args: data
+        Returns: Scikit-Learn pipeline of baseline feature transformations
+        """
+
+        categorical_features = data.select_dtypes(include=['object']).columns
+        boolean_features = data.select_dtypes(include=['bool']).columns
+
+        # build categorical feature dicionary
+        feature_pipe = dict()
+        for col in categorical_features:
+            feature_pipe[col] = cls.categorical_constructor(col)
+
+        # boolean are categorical
+        for col in boolean_features:
+            feature_pipe[col] = cls.categorical_constructor(col)
+
+        # build continuous log features
+        for col in cls.dollar_features_b:
+            feature_pipe[col] = cls.log_constructor(col)
+
+        # build continuous scale features
+        for col in cls.continuous_features:
+            feature_pipe[col] = cls.scale_constructor(col)
+
+        # row stats
+        for col in cls.base_features:
             feature_pipe[col] = cls.original_constructor(col)
 
         feature_list = []
